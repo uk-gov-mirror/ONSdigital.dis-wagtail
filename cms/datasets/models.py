@@ -191,6 +191,10 @@ class Dataset(models.Model):  # type: ignore[django-manager-missing]
         return f"{self.title} (Edition: {self.formatted_edition}, Ver: {self.version})"
 
     @property
+    def compound_id(self) -> str:
+        return f"{self.namespace},{self.edition},{self.version}"
+
+    @property
     def formatted_edition(self) -> str:
         return self.edition.replace("-", " ").title()
 
