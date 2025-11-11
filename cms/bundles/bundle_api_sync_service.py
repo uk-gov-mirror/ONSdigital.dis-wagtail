@@ -6,16 +6,16 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 
-from cms.bundles.clients.api import BundleAPIClient, BundleAPIClientError, BundleAPIClientError404
-from cms.bundles.decorators import datasets_bundle_api_enabled
-from cms.bundles.enums import BundleStatus
-from cms.bundles.utils import (
-    BundleAPIBundleMetadata,
-    build_bundle_data_for_api,
-    build_bundle_data_from_api_response,
+from cms.bundles.clients.api import (
+    BundleAPIClient,
+    BundleAPIClientError,
+    BundleAPIClientError404,
     build_content_item_for_dataset,
     extract_content_id_from_bundle_response,
 )
+from cms.bundles.decorators import datasets_bundle_api_enabled
+from cms.bundles.enums import BundleStatus
+from cms.bundles.utils import BundleAPIBundleMetadata, build_bundle_data_for_api, build_bundle_data_from_api_response
 
 if TYPE_CHECKING:
     from cms.bundles.models import Bundle, BundleDataset
