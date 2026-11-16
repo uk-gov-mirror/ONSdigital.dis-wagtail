@@ -75,20 +75,11 @@ class ReleaseCalendarPageAdminForm(WagtailAdminPageForm):
 
         status = cleaned_data.get("status", "")
         notice = cleaned_data.get("notice", "")
+        self._validate_cancelled_status(status, notice)
         self._validate_non_provisional_status(status, cleaned_data)
-
-        # Run every check so all errors are reported in a single submission
-        validators = (
-            lambda: self._validate_cancelled_status(status, notice),
-            lambda: self._validate_change_logs(status, cleaned_data),
-            lambda: self._validate_date_fields(cleaned_data),
-            lambda: self._validate_text_fields(cleaned_data),
-        )
-        for validator in validators:
-            try:
-                validator()
-            except ValidationError as error:
-                self.add_error(None, error)
+        self._validate_change_logs(status, cleaned_data)
+        self._validate_date_fields(cleaned_data)
+        self._validate_text_fields(cleaned_data)
 
         return cleaned_data
 
@@ -123,10 +114,7 @@ class ReleaseCalendarPageAdminForm(WagtailAdminPageForm):
             and self.live_page
             and live_status in [ReleaseStatus.CONFIRMED, ReleaseStatus.PUBLISHED]
         ):
-            try:
-                self._validate_change_logs_dates(date_has_changed, change_log_added)
-            except ValidationError as error:
-                self.add_error(None, error)
+            self._validate_change_logs_dates(date_has_changed, change_log_added)
 
         if added_changes_count > 1:
             self.add_error(
@@ -151,10 +139,7 @@ class ReleaseCalendarPageAdminForm(WagtailAdminPageForm):
     def _validate_text_fields(self, cleaned_data: dict) -> None:
         """Validate text field formats."""
         if release_date_text := cleaned_data.get("release_date_text"):
-            try:
-                self.validate_release_date_text_format(release_date_text, self.instance.locale)
-            except ValidationError as error:
-                self.add_error(None, error)
+            self.validate_release_date_text_format(release_date_text, self.instance.locale)
 
         if next_release_date_text := cleaned_data.get("next_release_date_text"):
             locale_code = "en" if self.instance.locale.language_code == "en-gb" else self.instance.locale.language_code
@@ -211,16 +196,15 @@ class ReleaseCalendarPageAdminForm(WagtailAdminPageForm):
 
         if any(date is None for date in dates) or len(dates) > MAX_DATE_PARTS:
             language = self.instance.locale.get_display_name()
-            raise ValidationError(
-                {
-                    "release_date_text": (
-                        "The release date text must be in the 'Month YYYY' or 'Month YYYY to Month YYYY' format"
-                        f" in {language}."
-                    )
-                }
+            self.add_error(
+                "release_date_text",
+                "The release date text must be in the 'Month YYYY' or 'Month YYYY to Month YYYY' format"
+                f" in {language}.",
             )
+            return
+
         if len(dates) == MAX_DATE_PARTS and dates[0] >= dates[1]:  # type: ignore # Dates guaranteed to not be None
-            raise ValidationError({"release_date_text": "The end month must be after the start month."})
+            self.add_error("release_date_text", "The end month must be after the start month.")
 
     def validate_release_next_date_text_format(
         self, next_release_date_text: str, locale: str, cleaned_data: dict
@@ -228,7 +212,8 @@ class ReleaseCalendarPageAdminForm(WagtailAdminPageForm):
         parsed_date = parse_day_month_year_time(next_release_date_text, locale)
 
         if parsed_date is not None and cleaned_data.get("release_date") and parsed_date <= cleaned_data["release_date"]:
-            raise ValidationError({"next_release_date_text": "The next release date must be after the release date."})
+            self.add_error("next_release_date_text", "The next release date must be after the release date.")
+            return
 
         to_be_confirmed_text = get_translated_string(
             "To be confirmed",
@@ -236,13 +221,10 @@ class ReleaseCalendarPageAdminForm(WagtailAdminPageForm):
         ) or _("To be confirmed")  # This line ensures makemessages picks up the string
 
         if parsed_date is None and to_be_confirmed_text != next_release_date_text:
-            raise ValidationError(
-                {
-                    "next_release_date_text": (
-                        'The next release date text must be in the "DD Month YYYY Time" format or say '
-                        f'"{to_be_confirmed_text}" in {self.instance.locale.get_display_name()}.'
-                    )
-                }
+            self.add_error(
+                "next_release_date_text",
+                'The next release date text must be in the "DD Month YYYY Time" format or say '
+                f'"{to_be_confirmed_text}" in {self.instance.locale.get_display_name()}.',
             )
 
     def _validate_not_in_active_bundle(self) -> None:
@@ -265,27 +247,21 @@ class ReleaseCalendarPageAdminForm(WagtailAdminPageForm):
             "Please unlink the release calendar page from the bundle before cancelling.",
             bundle_str,
         )
-        raise ValidationError({"status": message})
+        self.add_error("status", message)
 
     def _validate_change_logs_dates(self, date_has_changed: bool, change_log_added: bool) -> None:
         if date_has_changed and not change_log_added:
-            raise ValidationError(
-                {
-                    "changes_to_release_date": (
-                        "If a confirmed calendar entry needs to be rescheduled, "
-                        "the 'Changes to release date' field must be filled out."
-                    )
-                }
+            self.add_error(
+                "changes_to_release_date",
+                "If a confirmed calendar entry needs to be rescheduled, "
+                "the 'Changes to release date' field must be filled out.",
             )
 
         if change_log_added and not date_has_changed:
-            raise ValidationError(
-                {
-                    "changes_to_release_date": (
-                        "You have added a 'Changes to release date' entry, "
-                        "but the release date is the same as the published version."
-                    )
-                }
+            self.add_error(
+                "changes_to_release_date",
+                "You have added a 'Changes to release date' entry, "
+                "but the release date is the same as the published version.",
             )
 
     def clean_release_date(self) -> datetime | None:

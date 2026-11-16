@@ -558,7 +558,6 @@ class ReleaseCalendarPageAdminFormTestCase(WagtailTestUtils, TestCase):
         data = self.form_data
         release_date = timezone.now()
         data["status"] = ReleaseStatus.CANCELLED
-        data["notice"] = rich_text("")
         data["release_date"] = release_date
         data["next_release_date"] = release_date - datetime.timedelta(days=1)
         form = self.form_class(instance=self.page, data=data, for_user=self.superuser)
