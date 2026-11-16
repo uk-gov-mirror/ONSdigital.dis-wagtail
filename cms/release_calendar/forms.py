@@ -69,6 +69,17 @@ class ReleaseCalendarPageAdminForm(WagtailAdminPageForm):
             self.fields["notice"].disabled = True
             self.fields["notice"].widget = ReadOnlyRichTextWidget()
 
+    @property
+    def page_locale(self) -> Locale:
+        """Returns the page locale, falling back to the parent's when previewing an unsaved page."""
+        if self.instance.locale_id:
+            return self.instance.locale  # type: ignore[no-any-return]
+        if self.parent_page:
+            return self.parent_page.locale  # type: ignore[no-any-return]
+
+        # This can't really happen, but we return the default locale as a fallback.
+        return Locale.get_default()
+
     def clean(self) -> dict:
         """Validate the submitted release calendar data."""
         cleaned_data: dict = super().clean()
@@ -141,10 +152,10 @@ class ReleaseCalendarPageAdminForm(WagtailAdminPageForm):
     def _validate_text_fields(self, cleaned_data: dict) -> None:
         """Validate text field formats."""
         if release_date_text := cleaned_data.get("release_date_text"):
-            self.validate_release_date_text_format(release_date_text, self.instance.locale)
+            self.validate_release_date_text_format(release_date_text, self.page_locale)
 
         if next_release_date_text := cleaned_data.get("next_release_date_text"):
-            locale_code = "en" if self.instance.locale.language_code == "en-gb" else self.instance.locale.language_code
+            locale_code = "en" if self.page_locale.language_code == "en-gb" else self.page_locale.language_code
             self.validate_release_next_date_text_format(next_release_date_text, locale_code, cleaned_data)
 
     def clean_notice(self) -> str:
@@ -197,7 +208,7 @@ class ReleaseCalendarPageAdminForm(WagtailAdminPageForm):
         dates = [parse_month_year(part, locale_code) for part in parts]
 
         if any(date is None for date in dates) or len(dates) > MAX_DATE_PARTS:
-            language = self.instance.locale.get_display_name()
+            language = self.page_locale.get_display_name()
             raise ValidationError(
                 {
                     "release_date_text": (
@@ -219,7 +230,7 @@ class ReleaseCalendarPageAdminForm(WagtailAdminPageForm):
 
         to_be_confirmed_text = get_translated_string(
             "To be confirmed",
-            self.instance.locale.language_code,
+            self.page_locale.language_code,
         ) or _("To be confirmed")  # This line ensures makemessages picks up the string
 
         if parsed_date is None and to_be_confirmed_text != next_release_date_text:
@@ -227,7 +238,7 @@ class ReleaseCalendarPageAdminForm(WagtailAdminPageForm):
                 {
                     "next_release_date_text": (
                         'The next release date text must be in the "DD Month YYYY Time" format or say '
-                        f'"{to_be_confirmed_text}" in {self.instance.locale.get_display_name()}.'
+                        f'"{to_be_confirmed_text}" in {self.page_locale.get_display_name()}.'
                     )
                 }
             )
