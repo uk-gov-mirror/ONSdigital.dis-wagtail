@@ -5,6 +5,8 @@ The CMS implements logging that conforms to the [ONS Logging standards](https://
 This is done by creating a custom log formatter classes ([ref](https://github.com/ONSdigital/dis-wagtail/blob/main/cms/core/logs.py)), and
 setting up the [Django logging](https://docs.djangoproject.com/en/stable/topics/logging/) settings to [use them](https://github.com/ONSdigital/dis-wagtail/blob/main/cms/settings/base.py#L485).
 
+For protective monitoring and audit logging, see [Activity and audit logging](../activity-audit-logging.md).
+
 ## Developer notes
 
 To start with, read the [Django logging](https://docs.djangoproject.com/en/stable/topics/logging/) documentation.

@@ -30,7 +30,8 @@ To work on this project, see the [README](../README.md).
     - [Locked migrate](custom-features/locked-migrate.md)
     - [Page privacy](custom-features/page_privacy.md)
     - [Data creation scripts](custom-features/data-creation-scripts.md)
-    - [Protective monitoring](custom-features/protective-monitoring.md)
+
+- [Activity and audit logging](activity-audit-logging.md)
 
 - Troubleshooting
     - [Troubleshooting guide](troubleshooting.md)

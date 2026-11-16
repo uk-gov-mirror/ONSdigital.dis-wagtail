@@ -13,4 +13,3 @@ The following are project-specific features:
 - [Cache Invalidation Replay](cache-invalidation-replay.md)
 - [Data creation scripts](data-creation-scripts.md)
 - [Taxonomy topics](taxonomy-topics.md)
-- [Protective monitoring](protective-monitoring.md)
