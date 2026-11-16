@@ -75,20 +75,29 @@ class ReleaseCalendarPageAdminForm(WagtailAdminPageForm):
 
         status = cleaned_data.get("status", "")
         notice = cleaned_data.get("notice", "")
-        self._validate_cancelled_status(status, notice)
         self._validate_non_provisional_status(status, cleaned_data)
-        self._validate_change_logs(status, cleaned_data)
-        self._validate_date_fields(cleaned_data)
-        self._validate_text_fields(cleaned_data)
+
+        # Run every check so all errors are reported in a single submission
+        validators = (
+            lambda: self._validate_cancelled_status(status, notice),
+            lambda: self._validate_change_logs(status, cleaned_data),
+            lambda: self._validate_date_fields(cleaned_data),
+            lambda: self._validate_text_fields(cleaned_data),
+        )
+        for validator in validators:
+            try:
+                validator()
+            except ValidationError as error:
+                self.add_error(None, error)
 
         return cleaned_data
 
     def _validate_cancelled_status(self, status: str, notice: str) -> None:
         """Validate cancelled status requirements."""
         if status == ReleaseStatus.CANCELLED:
-            self._validate_not_in_active_bundle()
             if not notice:
-                raise ValidationError({"notice": "The notice field is required when the release is cancelled"})
+                self.add_error("notice", "The notice field is required when the release is cancelled")
+            self._validate_not_in_active_bundle()
 
     def _validate_non_provisional_status(self, status: str, cleaned_data: dict) -> None:
         """Validate non-provisional status requirements."""
@@ -114,34 +123,38 @@ class ReleaseCalendarPageAdminForm(WagtailAdminPageForm):
             and self.live_page
             and live_status in [ReleaseStatus.CONFIRMED, ReleaseStatus.PUBLISHED]
         ):
-            self._validate_change_logs_dates(date_has_changed, change_log_added)
+            try:
+                self._validate_change_logs_dates(date_has_changed, change_log_added)
+            except ValidationError as error:
+                self.add_error(None, error)
 
         if added_changes_count > 1:
-            raise ValidationError(
-                {
-                    "changes_to_release_date": (
-                        "Only one 'Changes to release date' entry can be added per release date change."
-                    )
-                }
+            self.add_error(
+                "changes_to_release_date",
+                "Only one 'Changes to release date' entry can be added per release date change.",
             )
 
     def _validate_date_fields(self, cleaned_data: dict) -> None:
         """Validate date field relationships."""
-        if (
-            cleaned_data.get("release_date")
-            and cleaned_data.get("next_release_date")
-            and cleaned_data["release_date"] >= cleaned_data["next_release_date"]
-        ):
-            raise ValidationError({"next_release_date": "The next release date must be after the release date."})
+        release_date = cleaned_data.get("release_date")
+        next_release_date = cleaned_data.get("next_release_date")
+        next_release_date_text = cleaned_data.get("next_release_date_text")
 
-        if cleaned_data.get("next_release_date") and cleaned_data.get("next_release_date_text"):
+        if release_date and next_release_date and release_date >= next_release_date:
+            self.add_error("next_release_date", "The next release date must be after the release date.")
+
+        if next_release_date and next_release_date_text:
             error = "Please enter the next release date or the next release text, not both."
-            raise ValidationError({"next_release_date": error, "next_release_date_text": error})
+            self.add_error("next_release_date", error)
+            self.add_error("next_release_date_text", error)
 
     def _validate_text_fields(self, cleaned_data: dict) -> None:
         """Validate text field formats."""
         if release_date_text := cleaned_data.get("release_date_text"):
-            self.validate_release_date_text_format(release_date_text, self.instance.locale)
+            try:
+                self.validate_release_date_text_format(release_date_text, self.instance.locale)
+            except ValidationError as error:
+                self.add_error(None, error)
 
         if next_release_date_text := cleaned_data.get("next_release_date_text"):
             locale_code = "en" if self.instance.locale.language_code == "en-gb" else self.instance.locale.language_code

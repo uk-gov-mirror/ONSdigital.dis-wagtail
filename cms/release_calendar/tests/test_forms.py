@@ -551,6 +551,23 @@ class ReleaseCalendarPageAdminFormTestCase(WagtailTestUtils, TestCase):
         )
         self.assertFormError(form, "status", message)
 
+    def test_form_clean__reports_all_errors_at_once(self):
+        """Checks that independent validation errors are all reported in a single submission."""
+        BundleFactory(release_calendar_page=self.page)
+
+        data = self.form_data
+        release_date = timezone.now()
+        data["status"] = ReleaseStatus.CANCELLED
+        data["notice"] = rich_text("")
+        data["release_date"] = release_date
+        data["next_release_date"] = release_date - datetime.timedelta(days=1)
+        form = self.form_class(instance=self.page, data=data, for_user=self.superuser)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("status", form.errors)
+        self.assertIn("notice", form.errors)
+        self.assertIn("next_release_date", form.errors)
+
     def test_form_clean__validates_cannot_cancel_if_in_review_bundle(self):
         """Checks that the form prevents cancellation when the page is in an in-review bundle."""
         bundle = BundleFactory(release_calendar_page=self.page, in_review=True)
