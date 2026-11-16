@@ -1991,6 +1991,87 @@ class BundleDeleteTestCase(WagtailTestUtils, TestCase):
 
         self.assertEqual(response.status_code, HTTPStatus.NOT_FOUND)
 
+    def test_bundle_not_deletable_with_pages(self):
+        """AC1: Bundle with attached pages cannot be deleted."""
+        # Add a page to the bundle
+        page = StatisticalArticlePageFactory()
+        BundlePageFactory(parent=self.bundle, page=page)
+
+        # Try to access delete view - should raise PermissionDenied
+        response = self.client.get(self.delete_url, follow=True)
+        self.assertRedirects(response, reverse("wagtailadmin_home"))
+        self.assertContains(response, "Sorry, you do not have permission to access this area.")
+
+        # Try to delete via POST - should not delete
+        response = self.client.post(self.delete_url, data={"action-delete": "delete"}, follow=True)
+        self.assertRedirects(response, reverse("wagtailadmin_home"))
+        self.assertTrue(Bundle.objects.filter(pk=self.bundle.pk).exists())
+
+        # Delete button should not be shown
+        response = self.client.get(self.inspect_url)
+        self.assertNotContains(response, self.delete_url)
+
+    def test_bundle_not_deletable_with_datasets(self):
+        """AC1: Bundle with attached datasets cannot be deleted."""
+        # Add a dataset to the bundle
+        dataset = DatasetFactory()
+        BundleDatasetFactory(parent=self.bundle, dataset=dataset)
+
+        # Try to access delete view - should raise PermissionDenied
+        response = self.client.get(self.delete_url, follow=True)
+        self.assertRedirects(response, reverse("wagtailadmin_home"))
+        self.assertContains(response, "Sorry, you do not have permission to access this area.")
+
+        # Try to delete via POST - should not delete
+        response = self.client.post(self.delete_url, data={"action-delete": "delete"}, follow=True)
+        self.assertRedirects(response, reverse("wagtailadmin_home"))
+        self.assertTrue(Bundle.objects.filter(pk=self.bundle.pk).exists())
+
+        # Delete button should not be shown
+        response = self.client.get(self.inspect_url)
+        self.assertNotContains(response, self.delete_url)
+
+    def test_bundle_not_deletable_with_calendar_entry(self):
+        """AC1: Bundle with calendar entry cannot be deleted."""
+        # Add a calendar entry to the bundle
+        calendar = ReleaseCalendarPageFactory()
+        self.bundle.release_calendar_page = calendar
+        self.bundle.save(update_fields=["release_calendar_page"])
+
+        # Try to access delete view - should raise PermissionDenied
+        response = self.client.get(self.delete_url, follow=True)
+        self.assertRedirects(response, reverse("wagtailadmin_home"))
+        self.assertContains(response, "Sorry, you do not have permission to access this area.")
+
+        # Try to delete via POST - should not delete
+        response = self.client.post(self.delete_url, data={"action-delete": "delete"}, follow=True)
+        self.assertRedirects(response, reverse("wagtailadmin_home"))
+        self.assertTrue(Bundle.objects.filter(pk=self.bundle.pk).exists())
+
+        # Delete button should not be shown
+        response = self.client.get(self.inspect_url)
+        self.assertNotContains(response, self.delete_url)
+
+    def test_bundle_not_deletable_with_scheduled_publication(self):
+        """AC1: Bundle with scheduled publication date cannot be deleted."""
+        # Set a scheduled publication date
+        self.bundle.publication_date = timezone.now() + timedelta(days=1)
+        self.bundle.save(update_fields=["publication_date"])
+
+        # Try to access delete view - should raise PermissionDenied
+        response = self.client.get(self.delete_url, follow=True)
+        self.assertRedirects(response, reverse("wagtailadmin_home"))
+        self.assertContains(response, "Sorry, you do not have permission to access this area.")
+
+        # Try to delete via POST - should not delete
+        response = self.client.post(self.delete_url, data={"action-delete": "delete"}, follow=True)
+        self.assertRedirects(response, reverse("wagtailadmin_home"))
+        self.assertTrue(Bundle.objects.filter(pk=self.bundle.pk).exists())
+
+        # Delete button should not be shown
+        response = self.client.get(self.inspect_url)
+        self.assertNotContains(response, self.delete_url)
+
 
 class BundleChooserViewsetTestCase(BundleViewSetTestCaseMixin, TestCase):
     def test_chooser_viewset(self):
