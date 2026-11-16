@@ -2140,6 +2140,86 @@ class BundleDeleteTestCase(WagtailTestUtils, TestCase):
         # Bundle should NOT be deleted
         self.assertTrue(Bundle.objects.filter(pk=empty_bundle_pk).exists())
 
+    def test_bundle_can_be_deleted_successfully_in_draft(self):
+        """AC5: Empty bundle in Draft status can be deleted successfully."""
+        empty_bundle = BundleFactory(status=BundleStatus.DRAFT)
+        empty_bundle_pk = empty_bundle.pk
+        delete_url = reverse("bundle:delete", args=[empty_bundle_pk])
+        index_url = reverse("bundle:index")
+
+        # Verify bundle can be deleted
+        self.assertTrue(empty_bundle.can_be_deleted)
+
+        # Submit delete via POST
+        response = self.client.post(delete_url, data={"action-delete": "delete"}, follow=True)
+
+        # Should redirect to bundle index (success)
+        self.assertRedirects(response, index_url)
+
+        # Bundle should be deleted
+        self.assertFalse(Bundle.objects.filter(pk=empty_bundle_pk).exists())
+
+    def test_bundle_can_be_deleted_successfully_in_review(self):
+        """AC5: Empty bundle in Preview (IN_REVIEW) status can be deleted successfully."""
+        empty_bundle = BundleFactory(status=BundleStatus.IN_REVIEW)
+        empty_bundle_pk = empty_bundle.pk
+        delete_url = reverse("bundle:delete", args=[empty_bundle_pk])
+        index_url = reverse("bundle:index")
+
+        # Verify bundle can be deleted
+        self.assertTrue(empty_bundle.can_be_deleted)
+
+        # Submit delete via POST
+        response = self.client.post(delete_url, data={"action-delete": "delete"}, follow=True)
+
+        # Should redirect to bundle index (success)
+        self.assertRedirects(response, index_url)
+
+        # Bundle should be deleted
+        self.assertFalse(Bundle.objects.filter(pk=empty_bundle_pk).exists())
+
+    def test_bundle_cannot_be_deleted_if_has_pages(self):
+        """AC5 Inverse: Bundle with pages cannot be deleted even if in deletable status."""
+        bundle = BundleFactory(status=BundleStatus.DRAFT)
+        page = StatisticalArticlePageFactory()
+        BundlePageFactory(parent=bundle, page=page)
+
+        # Verify bundle cannot be deleted
+        self.assertFalse(bundle.can_be_deleted)
+
+        # Try to delete
+        delete_url = reverse("bundle:delete", args=[bundle.pk])
+        response = self.client.post(delete_url, data={"action-delete": "delete"}, follow=True)
+
+        # Should show error message
+        messages_list = list(response.context["messages"])
+        self.assertTrue(len(messages_list) >= 1)
+        self.assertEqual(messages_list[0].level, django.contrib.messages.ERROR)
+
+        # Bundle should NOT be deleted
+        self.assertTrue(Bundle.objects.filter(pk=bundle.pk).exists())
+
+    def test_bundle_cannot_be_deleted_if_has_datasets(self):
+        """AC5 Inverse: Bundle with datasets cannot be deleted even if in deletable status."""
+        bundle = BundleFactory(status=BundleStatus.DRAFT)
+        dataset = DatasetFactory()
+        BundleDatasetFactory(parent=bundle, dataset=dataset)
+
+        # Verify bundle cannot be deleted
+        self.assertFalse(bundle.can_be_deleted)
+
+        # Try to delete
+        delete_url = reverse("bundle:delete", args=[bundle.pk])
+        response = self.client.post(delete_url, data={"action-delete": "delete"}, follow=True)
+
+        # Should show error message
+        messages_list = list(response.context["messages"])
+        self.assertTrue(len(messages_list) >= 1)
+        self.assertEqual(messages_list[0].level, django.contrib.messages.ERROR)
+
+        # Bundle should NOT be deleted
+        self.assertTrue(Bundle.objects.filter(pk=bundle.pk).exists())
+
 
 class BundleChooserViewsetTestCase(BundleViewSetTestCaseMixin, TestCase):
     def test_chooser_viewset(self):
