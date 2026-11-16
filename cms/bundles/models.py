@@ -247,13 +247,12 @@ class Bundle(index.Indexed, ClusterableModel, models.Model):  # type: ignore[dja
     @property
     def can_be_deleted(self) -> bool:
         # AC1: Bundles with attached content cannot be deleted
+        # Content = pages, datasets, or release calendar entries
         if self.bundled_pages.exists():
             return False
         if self.bundled_datasets.exists():
             return False
         if self.release_calendar_page_id:
-            return False
-        if self.publication_date:
             return False
 
         # Must also be in deletable status

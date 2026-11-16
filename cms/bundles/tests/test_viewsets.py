@@ -2078,34 +2078,11 @@ class BundleDeleteTestCase(WagtailTestUtils, TestCase):
         response = self.client.get(self.inspect_url)
         self.assertNotContains(response, self.delete_url)
 
-    def test_bundle_not_deletable_with_scheduled_publication(self):
-        """AC1: Bundle with scheduled publication date cannot be deleted."""
-        # Set a scheduled publication date
-        self.bundle.publication_date = timezone.now() + timedelta(days=1)
-        self.bundle.save(update_fields=["publication_date"])
-
-        # Try to access delete view (GET) - should raise PermissionDenied (don't show form)
-        response = self.client.get(self.delete_url, follow=True)
-        self.assertRedirects(response, reverse("wagtailadmin_home"))
-        self.assertContains(response, "Sorry, you do not have permission to access this area.")
-
-        # Try to delete via POST - should not delete and show error on inspect page
-        response = self.client.post(self.delete_url, data={"action-delete": "delete"}, follow=True)
-        # Should redirect to inspect page with error message (AC2 race condition handling)
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("object", response.context)
-        self.assertEqual(response.context["object"].pk, self.bundle.pk)
-        messages_list = list(response.context["messages"])
-        self.assertEqual(len(messages_list), 1)
-        self.assertEqual(messages_list[0].level, django.contrib.messages.ERROR)
-        self.assertTrue(Bundle.objects.filter(pk=self.bundle.pk).exists())
-
     def test_bundle_deletion_race_condition_shows_error(self):
         """AC2: Show error message when bundle becomes non-deletable during deletion attempt."""
         # Create an empty draft bundle that can be deleted
         empty_bundle = BundleFactory(status=BundleStatus.DRAFT)
         empty_bundle_pk = empty_bundle.pk
-        inspect_url = reverse("bundle:inspect", args=[empty_bundle_pk])
         delete_url = reverse("bundle:delete", args=[empty_bundle_pk])
 
         # Verify bundle can be deleted initially (empty bundle in draft status)
