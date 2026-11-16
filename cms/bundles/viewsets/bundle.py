@@ -859,7 +859,9 @@ class BundleDeleteView(DeleteView):
     has_errors = False
 
     def dispatch(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponseBase:
-        if not self.object.can_be_deleted:
+        # AC1: Block GET requests if bundle has content (don't show delete form)
+        # AC2: Allow POST requests through so form_valid can show friendly error message
+        if request.method == "GET" and not self.object.can_be_deleted:
             raise PermissionDenied
         response: HttpResponseBase = super().dispatch(request, *args, **kwargs)
         return response
@@ -901,7 +903,9 @@ class BundleDeleteView(DeleteView):
             except Bundle.DoesNotExist as e:
                 raise Http404 from e
             if not bundle.can_be_deleted:
-                raise PermissionDenied("The bundle cannot be deleted.")
+                # AC2: Race condition - bundle became non-deletable during deletion attempt
+                # Raise ValidationError with specific message for form_valid to handle
+                raise ValidationError("To delete this bundle remove attached content.")
             log(instance=bundle, action="wagtail.delete")
             bundle.delete()
             self.sync_bundle_deletion_with_bundle_api(bundle)
@@ -912,9 +916,18 @@ class BundleDeleteView(DeleteView):
             return response
         except ValidationError as e:
             error = getattr(e, "message", str(e))
+            # AC2: Handle race condition error specifically
+            if error == "To delete this bundle remove attached content.":
+                messages.error(self.request, error)
+                return redirect(self.object.full_inspect_url, preserve_request=False)
+            # Other validation errors redirect to index
             error_message = f"The bundle could not be deleted due to errors. {error}."
             messages.error(self.request, error_message)
             return redirect(reverse(self.index_url_name), preserve_request=False)
+        except PermissionDenied:
+            # AC2: Race condition - bundle became non-deletable after user clicked delete
+            messages.error(self.request, "To delete this bundle remove attached content.")
+            return redirect(self.object.full_inspect_url, preserve_request=False)
 
 
 class BundleIndexView(IndexView):

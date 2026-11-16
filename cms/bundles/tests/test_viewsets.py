@@ -7,6 +7,7 @@ from typing import ClassVar
 from unittest import mock
 from unittest.mock import patch
 
+import django.contrib.messages
 import time_machine
 from django.conf import settings
 from django.core.cache import cache
@@ -1945,14 +1946,19 @@ class BundleDeleteTestCase(WagtailTestUtils, TestCase):
                 self.bundle.status = status
                 self.bundle.save(update_fields=["status"])
 
-                # try both GET and POST for the delete view
+                # try GET for the delete view - should raise PermissionDenied
                 response = self.client.get(self.delete_url, follow=True)
                 self.assertRedirects(response, reverse("wagtailadmin_home"))
                 self.assertContains(response, "Sorry, you do not have permission to access this area.")
 
+                # try POST for the delete view - should redirect to inspect page with error
                 response = self.client.post(self.delete_url, data={"action-delete": "delete"}, follow=True)
-                self.assertRedirects(response, reverse("wagtailadmin_home"))
-                self.assertContains(response, "Sorry, you do not have permission to access this area.")
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("object", response.context)
+                self.assertEqual(response.context["object"].pk, self.bundle.pk)
+                messages_list = list(response.context["messages"])
+                self.assertTrue(len(messages_list) >= 1)
+                self.assertEqual(messages_list[0].level, django.contrib.messages.ERROR)
                 self.assertTrue(Bundle.objects.filter(pk=self.bundle.pk).exists())
 
                 # the edit view redirects for published statuses, otherwise it has no delete URL
@@ -1982,7 +1988,9 @@ class BundleDeleteTestCase(WagtailTestUtils, TestCase):
             lambda: Bundle.objects.filter(pk=self.bundle.pk).update(status=BundleStatus.APPROVED)
         )
 
-        self.assertRedirects(response, reverse("wagtailadmin_home"), fetch_redirect_response=False)
+        # Should redirect to inspect page with error (race condition handling)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(f"/admin/bundle/inspect/{self.bundle.pk}/", response.url)
         self.assertTrue(Bundle.objects.filter(pk=self.bundle.pk).exists())
         self.assertFalse(ModelLogEntry.objects.filter(action="wagtail.delete").exists())
 
@@ -1997,14 +2005,20 @@ class BundleDeleteTestCase(WagtailTestUtils, TestCase):
         page = StatisticalArticlePageFactory()
         BundlePageFactory(parent=self.bundle, page=page)
 
-        # Try to access delete view - should raise PermissionDenied
+        # Try to access delete view (GET) - should raise PermissionDenied (don't show form)
         response = self.client.get(self.delete_url, follow=True)
         self.assertRedirects(response, reverse("wagtailadmin_home"))
         self.assertContains(response, "Sorry, you do not have permission to access this area.")
 
-        # Try to delete via POST - should not delete
+        # Try to delete via POST - should not delete and show error on inspect page
         response = self.client.post(self.delete_url, data={"action-delete": "delete"}, follow=True)
-        self.assertRedirects(response, reverse("wagtailadmin_home"))
+        # Should redirect to inspect page with error message (AC2 race condition handling)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("object", response.context)
+        self.assertEqual(response.context["object"].pk, self.bundle.pk)
+        messages_list = list(response.context["messages"])
+        self.assertEqual(len(messages_list), 1)
+        self.assertEqual(messages_list[0].level, django.contrib.messages.ERROR)
         self.assertTrue(Bundle.objects.filter(pk=self.bundle.pk).exists())
 
         # Delete button should not be shown
@@ -2017,14 +2031,20 @@ class BundleDeleteTestCase(WagtailTestUtils, TestCase):
         dataset = DatasetFactory()
         BundleDatasetFactory(parent=self.bundle, dataset=dataset)
 
-        # Try to access delete view - should raise PermissionDenied
+        # Try to access delete view (GET) - should raise PermissionDenied (don't show form)
         response = self.client.get(self.delete_url, follow=True)
         self.assertRedirects(response, reverse("wagtailadmin_home"))
         self.assertContains(response, "Sorry, you do not have permission to access this area.")
 
-        # Try to delete via POST - should not delete
+        # Try to delete via POST - should not delete and show error on inspect page
         response = self.client.post(self.delete_url, data={"action-delete": "delete"}, follow=True)
-        self.assertRedirects(response, reverse("wagtailadmin_home"))
+        # Should redirect to inspect page with error message (AC2 race condition handling)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("object", response.context)
+        self.assertEqual(response.context["object"].pk, self.bundle.pk)
+        messages_list = list(response.context["messages"])
+        self.assertEqual(len(messages_list), 1)
+        self.assertEqual(messages_list[0].level, django.contrib.messages.ERROR)
         self.assertTrue(Bundle.objects.filter(pk=self.bundle.pk).exists())
 
         # Delete button should not be shown
@@ -2038,14 +2058,20 @@ class BundleDeleteTestCase(WagtailTestUtils, TestCase):
         self.bundle.release_calendar_page = calendar
         self.bundle.save(update_fields=["release_calendar_page"])
 
-        # Try to access delete view - should raise PermissionDenied
+        # Try to access delete view (GET) - should raise PermissionDenied (don't show form)
         response = self.client.get(self.delete_url, follow=True)
         self.assertRedirects(response, reverse("wagtailadmin_home"))
         self.assertContains(response, "Sorry, you do not have permission to access this area.")
 
-        # Try to delete via POST - should not delete
+        # Try to delete via POST - should not delete and show error on inspect page
         response = self.client.post(self.delete_url, data={"action-delete": "delete"}, follow=True)
-        self.assertRedirects(response, reverse("wagtailadmin_home"))
+        # Should redirect to inspect page with error message (AC2 race condition handling)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("object", response.context)
+        self.assertEqual(response.context["object"].pk, self.bundle.pk)
+        messages_list = list(response.context["messages"])
+        self.assertEqual(len(messages_list), 1)
+        self.assertEqual(messages_list[0].level, django.contrib.messages.ERROR)
         self.assertTrue(Bundle.objects.filter(pk=self.bundle.pk).exists())
 
         # Delete button should not be shown
@@ -2058,19 +2084,61 @@ class BundleDeleteTestCase(WagtailTestUtils, TestCase):
         self.bundle.publication_date = timezone.now() + timedelta(days=1)
         self.bundle.save(update_fields=["publication_date"])
 
-        # Try to access delete view - should raise PermissionDenied
+        # Try to access delete view (GET) - should raise PermissionDenied (don't show form)
         response = self.client.get(self.delete_url, follow=True)
         self.assertRedirects(response, reverse("wagtailadmin_home"))
         self.assertContains(response, "Sorry, you do not have permission to access this area.")
 
-        # Try to delete via POST - should not delete
+        # Try to delete via POST - should not delete and show error on inspect page
         response = self.client.post(self.delete_url, data={"action-delete": "delete"}, follow=True)
-        self.assertRedirects(response, reverse("wagtailadmin_home"))
+        # Should redirect to inspect page with error message (AC2 race condition handling)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("object", response.context)
+        self.assertEqual(response.context["object"].pk, self.bundle.pk)
+        messages_list = list(response.context["messages"])
+        self.assertEqual(len(messages_list), 1)
+        self.assertEqual(messages_list[0].level, django.contrib.messages.ERROR)
         self.assertTrue(Bundle.objects.filter(pk=self.bundle.pk).exists())
 
-        # Delete button should not be shown
-        response = self.client.get(self.inspect_url)
-        self.assertNotContains(response, self.delete_url)
+    def test_bundle_deletion_race_condition_shows_error(self):
+        """AC2: Show error message when bundle becomes non-deletable during deletion attempt."""
+        # Create an empty draft bundle that can be deleted
+        empty_bundle = BundleFactory(status=BundleStatus.DRAFT)
+        empty_bundle_pk = empty_bundle.pk
+        inspect_url = reverse("bundle:inspect", args=[empty_bundle_pk])
+        delete_url = reverse("bundle:delete", args=[empty_bundle_pk])
+
+        # Verify bundle can be deleted initially (empty bundle in draft status)
+        self.assertTrue(empty_bundle.can_be_deleted)
+
+        # Simulate another user adding a page to the bundle while this user is on the delete page
+        page = StatisticalArticlePageFactory()
+        BundlePageFactory(parent=empty_bundle, page=page)
+
+        # Refresh bundle from DB to verify it cannot be deleted anymore
+        empty_bundle.refresh_from_db()
+        self.assertFalse(empty_bundle.can_be_deleted)
+
+        # Try to delete via POST - bundle is no longer deletable
+        response = self.client.post(delete_url, data={"action-delete": "delete"}, follow=True)
+
+        # Should redirect back to bundle inspect page (not to index)
+        # Follow redirects and check final destination
+        self.assertEqual(response.status_code, 200)
+        # Verify we ended up on the inspect page by checking the response context
+        self.assertIn("object", response.context)
+        self.assertEqual(response.context["object"].pk, empty_bundle_pk)
+
+        # Should show error message about attached content
+        messages_list = list(response.context["messages"])
+        self.assertEqual(len(messages_list), 1)
+        # Check message text, allowing for formatting variations
+        message_text = str(messages_list[0]).strip()
+        self.assertIn("To delete this bundle remove attached content", message_text)
+        self.assertEqual(messages_list[0].level, django.contrib.messages.ERROR)
+
+        # Bundle should NOT be deleted
+        self.assertTrue(Bundle.objects.filter(pk=empty_bundle_pk).exists())
 
 
 class BundleChooserViewsetTestCase(BundleViewSetTestCaseMixin, TestCase):
