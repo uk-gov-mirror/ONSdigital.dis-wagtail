@@ -1894,6 +1894,44 @@ class BundleIndexViewTestCase(BundleViewSetTestCaseMixin, TestCase):
 
 
 class BundleDeleteTestCase(WagtailTestUtils, TestCase):
+    """Test suite for bundle deletion acceptance criteria.
+
+    This test suite verifies all 5 acceptance criteria for bundle deletion:
+
+    AC1: Race Condition Handling
+    - Bundles are protected from concurrent modifications during deletion
+    - If content is added while deletion is in progress, deletion is blocked
+    - User sees error message: "To delete this bundle remove attached content."
+
+    AC2: Content Validation
+    - Bundles with attached pages cannot be deleted
+    - Bundles with attached datasets cannot be deleted
+    - Bundles with attached release calendar entries cannot be deleted
+    - Bundles with publication dates set cannot be deleted
+
+    AC3: Approved Bundles Cannot Be Deleted
+    - Bundles in APPROVED status ('Ready to publish') cannot be deleted
+    - Delete button is hidden and delete view is inaccessible
+
+    AC4: Published Bundles Cannot Be Deleted
+    - Bundles in PUBLISHED status cannot be deleted
+    - Bundles in PARTIALLY_PUBLISHED status cannot be deleted
+    - Bundles in FAILED status cannot be deleted
+    - Delete view redirects to admin home with permission denied message
+
+    AC5: Empty Bundles Can Be Deleted (NEW - Tests in this class)
+    - Empty bundles in DRAFT status can be successfully deleted
+    - Empty bundles in IN_REVIEW (Preview) status can be successfully deleted
+    - Deletion is atomic and logged in audit trail
+    - Response redirects to admin home after successful deletion
+
+    Implementation References:
+    - Bundle.can_be_deleted property: Validates all deletion conditions
+    - BundleDeleteView.dispatch(): Checks can_be_deleted before allowing access
+    - BundleDeleteView.delete_action(): Transaction-safe deletion with re-validation
+    - DELETABLE_BUNDLE_STATUSES enum: Only DRAFT and IN_REVIEW statuses allowed
+    """
+
     @classmethod
     def setUpTestData(cls):
         cls.superuser = cls.create_superuser(username="admin")
@@ -1990,6 +2028,29 @@ class BundleDeleteTestCase(WagtailTestUtils, TestCase):
         response = self._post_delete_with_concurrent_change(lambda: Bundle.objects.filter(pk=self.bundle.pk).delete())
 
         self.assertEqual(response.status_code, HTTPStatus.NOT_FOUND)
+
+    def test_empty_bundle_in_draft_can_be_deleted(self):
+        """AC5: Empty bundles in Draft status can be deleted successfully."""
+        self.assertTrue(Bundle.objects.filter(pk=self.bundle.pk).exists())
+
+        response = self.client.post(self.delete_url, data={"action-delete": "delete"}, follow=True)
+
+        self.assertRedirects(response, reverse("wagtailadmin_home"))
+        self.assertFalse(Bundle.objects.filter(pk=self.bundle.pk).exists())
+        self.assertTrue(ModelLogEntry.objects.filter(action="wagtail.delete").exists())
+
+    def test_empty_bundle_in_review_can_be_deleted(self):
+        """AC5: Empty bundles in In Preview status can be deleted successfully."""
+        self.bundle.status = BundleStatus.IN_REVIEW
+        self.bundle.save(update_fields=["status"])
+
+        self.assertTrue(Bundle.objects.filter(pk=self.bundle.pk).exists())
+
+        response = self.client.post(self.delete_url, data={"action-delete": "delete"}, follow=True)
+
+        self.assertRedirects(response, reverse("wagtailadmin_home"))
+        self.assertFalse(Bundle.objects.filter(pk=self.bundle.pk).exists())
+        self.assertTrue(ModelLogEntry.objects.filter(action="wagtail.delete").exists())
 
 
 class BundleChooserViewsetTestCase(BundleViewSetTestCaseMixin, TestCase):
